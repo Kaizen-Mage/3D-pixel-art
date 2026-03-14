@@ -1,6 +1,6 @@
 #pragma once
 #include "raylib.h"
-#define MAX_LIGHTS 40
+#define MAX_LIGHTS 4
 
 typedef struct {   
     int type;

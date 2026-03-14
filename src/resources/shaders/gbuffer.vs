@@ -18,7 +18,7 @@ void main()
     fragTexCoord = vertexTexCoord;
 
     mat3 normalMatrix = transpose(inverse(mat3(matModel)));
-    fragNormal = normalMatrix * vertexNormal;
+    fragNormal = normalize(normalMatrix * normalize(vertexNormal));
 
     gl_Position = matProjection * matView * worldPos;
 }

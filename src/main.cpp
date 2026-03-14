@@ -7,6 +7,7 @@ int screenWidth=1920;
 int screenHeight=1080;
 int downWidth=1920/4;
 int downHeight=1080/4;
+int mode=0;
 struct GBuffer{
     unsigned int frameBufferId;
     unsigned int positionTextureId;
@@ -19,6 +20,7 @@ int main() {
     //Shader stuff
     Shader gbufferShader=LoadShader("src/resources/shaders/gbuffer.vs","src/resources/shaders/gbuffer.fs");
     Shader deferredShader=LoadShader("src/resources/shaders/deferred_shading.vs","src/resources/shaders/deferred_shading.fs");
+    Shader depthRender=LoadShader(0,"src/resources/shaders/depth_render.fs");
     deferredShader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(deferredShader, "viewPosition");
     
     
@@ -30,14 +32,18 @@ int main() {
     cam.up={0.0,1.0,0.0};
     cam.projection=CAMERA_PERSPECTIVE;
     Model cube=LoadModelFromMesh(GenMeshCube(1.0f,1.0f,1.0f));
+    Model gun=LoadModel("src/resources/models/Y.glb");
     cube.materials[0].shader=gbufferShader;
-    
+    for (int i = 0; i < gun.materialCount; i++) {
+        gun.materials[i].shader = gbufferShader;
+    }
+        
     GBuffer gBuffer;
     gBuffer.frameBufferId=rlLoadFramebuffer();
     rlEnableFramebuffer(gBuffer.frameBufferId);
 
     gBuffer.positionTextureId=rlLoadTexture(NULL,downWidth,downHeight,RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16,1);
-    gBuffer.normalTextureId=rlLoadTexture(NULL,downWidth,downHeight,RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16,1);
+    gBuffer.normalTextureId=rlLoadTexture(NULL,downWidth,downHeight,RL_PIXELFORMAT_UNCOMPRESSED_R16G16B16A16,1);
     gBuffer.albedoSpecTextureId=rlLoadTexture(NULL,downWidth,downHeight,RL_PIXELFORMAT_UNCOMPRESSED_R8G8B8A8,1);
 
     rlActiveDrawBuffers(3);
@@ -46,8 +52,8 @@ int main() {
     rlFramebufferAttach(gBuffer.frameBufferId,gBuffer.normalTextureId,RL_ATTACHMENT_COLOR_CHANNEL1,RL_ATTACHMENT_TEXTURE2D,0);
     rlFramebufferAttach(gBuffer.frameBufferId,gBuffer.albedoSpecTextureId,RL_ATTACHMENT_COLOR_CHANNEL2,RL_ATTACHMENT_TEXTURE2D,0);
     
-    gBuffer.depthRenderBufferId=rlLoadTextureDepth(downWidth,downHeight,true);
-    rlFramebufferAttach(gBuffer.frameBufferId,gBuffer.depthRenderBufferId,RL_ATTACHMENT_DEPTH,RL_ATTACHMENT_RENDERBUFFER,0);
+    gBuffer.depthRenderBufferId=rlLoadTextureDepth(downWidth,downHeight,false);
+    rlFramebufferAttach(gBuffer.frameBufferId,gBuffer.depthRenderBufferId,RL_ATTACHMENT_DEPTH,RL_ATTACHMENT_TEXTURE2D,0);
     
     
     if(rlFramebufferComplete(gBuffer.frameBufferId)){
@@ -59,19 +65,28 @@ int main() {
     int texUnitPosition = 0;
     int texUnitNormal = 1;
     int texUnitAlbedoSpec = 2;
+    int texUnitDepth= 3;
+    Vector3 renderSize={(float)downWidth,(float)downHeight};
     SetShaderValue(deferredShader, rlGetLocationUniform(deferredShader.id, "gPosition"), &texUnitPosition, RL_SHADER_UNIFORM_SAMPLER2D);
     SetShaderValue(deferredShader, rlGetLocationUniform(deferredShader.id, "gNormal"), &texUnitNormal, RL_SHADER_UNIFORM_SAMPLER2D);
     SetShaderValue(deferredShader, rlGetLocationUniform(deferredShader.id, "gAlbedoSpec"), &texUnitAlbedoSpec, RL_SHADER_UNIFORM_SAMPLER2D);
+    SetShaderValue(deferredShader, rlGetLocationUniform(deferredShader.id, "gDepth"), &texUnitDepth,RL_SHADER_UNIFORM_SAMPLER2D);
+    SetShaderValue(deferredShader,rlGetLocationUniform(deferredShader.id,"resolution"),&renderSize,RL_SHADER_UNIFORM_VEC2);
     rlDisableShader();
     
     Light lights[MAX_LIGHTS] = { 0 };
-    lights[0] = CreateLight(LIGHT_POINT, (Vector3){ -2, 1, -2 }, Vector3Zero(), YELLOW, deferredShader);
-    lights[1] = CreateLight(LIGHT_POINT, (Vector3){ 2, 1, 2 }, Vector3Zero(), RED, deferredShader);
-    lights[2] = CreateLight(LIGHT_POINT, (Vector3){ -2, 1, 2 }, Vector3Zero(), GREEN, deferredShader);
-    lights[3] = CreateLight(LIGHT_POINT, (Vector3){ 2, 1, -2 }, Vector3Zero(), BLUE, deferredShader);
+    lights[0] = CreateLight(LIGHT_POINT,{ -2, 1, -2 }, Vector3Zero(), YELLOW, deferredShader);
+    lights[1] = CreateLight(LIGHT_POINT,{ 2, 1, 2 }, Vector3Zero(), RED, deferredShader);
+    lights[2] = CreateLight(LIGHT_POINT,{ -2, 1, 2 }, Vector3Zero(), GREEN, deferredShader);
+    lights[3] = CreateLight(LIGHT_POINT,{ 2, 1, -2 }, Vector3Zero(), BLUE, deferredShader);
 
-    ToggleFullscreen();
+    //ToggleFullscreen();
     rlEnableDepthTest();
+    for (int i = 0; i < gun.meshCount; i++) {
+    Mesh m = gun.meshes[i];
+    std::cout << "Mesh " << i << " normals: " << (m.normals[i]) << std::endl;
+    }
+
     while (!WindowShouldClose()) {
        SetShaderValue(deferredShader,deferredShader.locs[SHADER_LOC_VECTOR_VIEW],&cam.position,SHADER_UNIFORM_VEC3);
        UpdateCamera(&cam,CAMERA_ORBITAL);
@@ -83,10 +98,19 @@ int main() {
         if (IsKeyPressed(KEY_G)) { lights[2].enabled = !lights[2].enabled; }
         if (IsKeyPressed(KEY_B)) { lights[3].enabled = !lights[3].enabled; }
 
+        //Switch Modes for preview
+
+        if (IsKeyPressed(KEY_ONE)) {mode=0; }
+        if (IsKeyPressed(KEY_TWO)) { mode=1; }
+        if (IsKeyPressed(KEY_THREE)) { mode=2; }
+        if (IsKeyPressed(KEY_FOUR)) { mode=3; }
+        if (IsKeyPressed(KEY_FIVE)) { mode=4; }
+
            // Update light values (actually, only enable/disable them)
         for (int i = 0; i < MAX_LIGHTS; i++) UpdateLightValues(deferredShader, lights[i]);
         
        BeginDrawing();
+        //Everything here is for the gBuffer
             rlEnableFramebuffer(gBuffer.frameBufferId);
             rlViewport(0,0,downWidth,downHeight);
             rlClearColor(0, 0, 0, 0);
@@ -94,47 +118,94 @@ int main() {
             rlDisableColorBlend();
             BeginMode3D(cam);
                 rlEnableShader(gbufferShader.id);
+                    float Outline=1.0;
+                    SetShaderValue(gbufferShader,GetShaderLocation(gbufferShader,"outline"),&Outline,SHADER_UNIFORM_FLOAT);
                     DrawModel(cube,Vector3Zero(),0.25,WHITE);
+                    Outline=0.0;
+                    SetShaderValue(gbufferShader,GetShaderLocation(gbufferShader,"outline"),&Outline,SHADER_UNIFORM_FLOAT);
+                    DrawModelEx(gun,{0.0,1.0,0.0},{1.0,0.0,0.0},-90,{80,80,80},WHITE);
                 rlDisableShader();
             EndMode3D();
             rlEnableColorBlend();
             rlDisableFramebuffer();
             rlClearScreenBuffers();
             rlViewport(0,0,screenWidth,screenHeight);
+            switch (mode)
+            {
+            case 0:
                 rlDisableColorBlend();
-                rlEnableShader(deferredShader.id);
-                     // Bind our g-buffer textures
-                    // We are binding them to locations that we earlier set in sampler2D uniforms `gPosition`, `gNormal`,
-                    // and `gAlbedoSpec`
-                    rlActiveTextureSlot(texUnitPosition);
-                    rlEnableTexture(gBuffer.positionTextureId);
-                    rlActiveTextureSlot(texUnitNormal);
-                    rlEnableTexture(gBuffer.normalTextureId);
-                    rlActiveTextureSlot(texUnitAlbedoSpec);
-                    rlEnableTexture(gBuffer.albedoSpecTextureId);
+                    rlEnableShader(deferredShader.id);
+                        // Bind our g-buffer textures
+                        // We are binding them to locations that we earlier set in sampler2D uniforms `gPosition`, `gNormal`,
+                        // and `gAlbedoSpec`
+                        rlActiveTextureSlot(texUnitPosition);
+                        rlEnableTexture(gBuffer.positionTextureId);
+                        rlActiveTextureSlot(texUnitNormal);
+                        rlEnableTexture(gBuffer.normalTextureId);
+                        rlActiveTextureSlot(texUnitAlbedoSpec);
+                        rlEnableTexture(gBuffer.albedoSpecTextureId);
+                        rlActiveTextureSlot(texUnitDepth);
+                        rlEnableTexture(gBuffer.depthRenderBufferId);
 
-                    // Finally, we draw a fullscreen quad to our default framebufferId
-                    // This will now be shaded using our deferred shader
-                    rlLoadDrawQuad();
+                        // Finally, we draw a fullscreen quad to our default framebufferId
+                        // This will now be shaded using our deferred shader
+                        rlLoadDrawQuad();
+                        rlDisableShader();
+                        rlEnableColorBlend();
+
+                        // As a last step, we now copy over the depth buffer from our g-buffer to the default framebufferId
+                rlBindFramebuffer(RL_READ_FRAMEBUFFER, gBuffer.frameBufferId);
+                rlBindFramebuffer(RL_DRAW_FRAMEBUFFER, 0);
+                rlBlitFramebuffer(0, 0, downWidth, downHeight, 0, 0, screenWidth, screenHeight, 0x00000100); // GL_DEPTH_BUFFER_BIT
+                rlDisableFramebuffer();
+                //This part for drwing the lights.I still want them to be down sampled
+                rlViewport(0,0,screenWidth,screenHeight);
+                BeginMode3D(cam);
+                    rlEnableShader(rlGetShaderIdDefault());
+                        for (int i = 0; i < MAX_LIGHTS; i++)
+                            {
+                                if (lights[i].enabled) DrawSphereEx(lights[i].position, 0.2f, 8, 8, lights[i].color);
+                                else DrawSphereWires(lights[i].position, 0.2f, 8, 8, ColorAlpha(lights[i].color, 0.3f));
+                            }
+                    
                     rlDisableShader();
-                    rlEnableColorBlend();
-
-                    // As a last step, we now copy over the depth buffer from our g-buffer to the default framebufferId
-            rlBindFramebuffer(RL_READ_FRAMEBUFFER, gBuffer.frameBufferId);
-            rlBindFramebuffer(RL_DRAW_FRAMEBUFFER, 0);
-            rlBlitFramebuffer(0, 0, downWidth, downHeight, 0, 0, screenWidth, screenHeight, 0x00000100); // GL_DEPTH_BUFFER_BIT
-            rlDisableFramebuffer();
-            // Since our shader is now done and disabled, we can draw spheres
-            // that represent light positions in default forward rendering
-            /*BeginMode3D(cam);
-                rlEnableShader(rlGetShaderIdDefault());
-                    for (int i = 0; i < MAX_LIGHTS; i++)
-                        {
-                            if (lights[i].enabled) DrawSphereEx(lights[i].position, 0.2f, 8, 8, lights[i].color);
-                            else DrawSphereWires(lights[i].position, 0.2f, 8, 8, ColorAlpha(lights[i].color, 0.3f));
-                        }
-                rlDisableShader();
-            EndMode3D();*/
+                EndMode3D();
+                break;
+            case 1:
+                DrawTextureRec((Texture2D){
+                        .id = gBuffer.positionTextureId,
+                        .width = screenWidth,
+                        .height = screenHeight,
+                    }, (Rectangle) { 0, 0, (float)screenWidth, (float)-screenHeight }, Vector2Zero(), RAYWHITE);
+                break;
+            case 2:
+                DrawTextureRec((Texture2D){
+                        .id = gBuffer.normalTextureId,
+                        .width = screenWidth,
+                        .height = screenHeight,
+                    }, (Rectangle) { 0, 0, (float)screenWidth, (float)-screenHeight }, Vector2Zero(), RAYWHITE);
+                break;
+            case 3:
+                DrawTextureRec((Texture2D){
+                        .id = gBuffer.albedoSpecTextureId,
+                        .width = screenWidth,
+                        .height = screenHeight,
+                    }, (Rectangle) { 0, 0, (float)screenWidth, (float)-screenHeight }, Vector2Zero(), RAYWHITE);
+            case 4:
+                BeginShaderMode(depthRender);
+                rlActiveTextureSlot(0);
+                rlEnableTexture(gBuffer.depthRenderBufferId);
+                DrawTextureRec((Texture2D){
+                        .id = gBuffer.depthRenderBufferId,
+                        .width = screenWidth,
+                        .height = screenHeight,
+                    }, (Rectangle) { 0, 0, (float)screenWidth, (float)-screenHeight }, Vector2Zero(), RAYWHITE);
+                EndShaderMode();
+            default:
+                break;
+            }
+             
+          
 
        EndDrawing();
     }
