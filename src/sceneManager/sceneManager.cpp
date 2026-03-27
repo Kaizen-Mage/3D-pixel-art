@@ -149,6 +149,7 @@ void SceneManager::Draw(){
         DrawModelEx(cube,{0.0,-0.25f,0.0f},{0.0f,0.0f,0.0f},0.0f,{10.0f,0.20f,10.0f},WHITE);
        //DrawModelEx(gun,{0.5,0.0,-0.5},{0.0,1.0,0.0},90.0f,{0.4,0.4,0.4},WHITE);
         DrawModelEx(man,{0,1,0},{0.0,2.0,0.0},90.0f,{1.0,1.0,1.0},WHITE);
+        DrawFPS(20,20);
     EndMode3D();
 
     rlEnableColorBlend();
@@ -234,7 +235,7 @@ void SceneManager::Draw(){
         rlBindFramebuffer(RL_DRAW_FRAMEBUFFER, 0);
         rlBlitFramebuffer(0, 0, downWidth, downHeight, 0, 0, screenWidth, screenHeight, 0x00000100);
         rlDisableFramebuffer();
-
+        //SetTargetFPS(60);
         rlViewport(0,0,screenWidth,screenHeight);
         
         BeginMode3D(cam);
@@ -311,6 +312,7 @@ void SceneManager::Draw(){
     }
     ImGui::End();
     ImGui::Begin("Camera Controls");
+    ImGui::Text(TextFormat("FPS:%i",GetFPS()));
     ImGui::SliderFloat("Camera Fovy",&cam.fovy,5.0,10.0);
     ImGui::SliderFloat3("Camera Position",&cam.position.x,5.0,15.0);
     ImGui::End();

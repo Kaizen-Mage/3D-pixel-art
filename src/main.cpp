@@ -13,7 +13,7 @@ int main() {
     SceneManager sceneManager=SceneManager(&context);
     SetTraceLogLevel(LOG_WARNING);
     //Shader stuff
-    //ToggleFullscreen();
+    ToggleFullscreen();
     while (!WindowShouldClose()) {
         sceneManager.Update(0.0);
         BeginDrawing();
